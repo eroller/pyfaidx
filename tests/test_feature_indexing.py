@@ -1,3 +1,4 @@
+import builtins
 import os
 import pytest
 from os.path import getmtime
@@ -7,12 +8,7 @@ import time
 import platform
 import shutil
 
-try:
-    from unittest import mock
-except ImportError:
-    import mock
-
-import six.moves.builtins as builtins
+from unittest import mock
 
 path = os.path.dirname(__file__)
 os.chdir(path)
@@ -24,6 +20,10 @@ def remove_index():
         os.remove('data/genes.fasta.fai')
     except EnvironmentError:
         pass  # some tests may delete this file
+    
+def test_version_issue_206():
+    import pyfaidx
+    assert isinstance(pyfaidx.__version__, str)    
 
 def test_build(remove_index):
     expect_index = ("gi|563317589|dbj|AB821309.1|	3510	114	70	71\n"
@@ -264,7 +264,7 @@ def test_build_issue_96_fail_build_faidx(remove_index):
             opened_files.append(f)
             return f
 
-        with mock.patch('six.moves.builtins.open', side_effect=test_open):
+        with mock.patch('builtins.open', side_effect=test_open):
             try:
                 Faidx(fasta_path)
                 remove_index.assertFail(
@@ -301,7 +301,7 @@ def test_build_issue_96_fail_read_malformed_index_duplicate_key(remove_index):
             opened_files.append(f)
             return f
 
-        with mock.patch('six.moves.builtins.open', side_effect=test_open):
+        with mock.patch('builtins.open', side_effect=test_open):
             try:
                 Faidx(fasta_path)
                 remove_index.assertFail(

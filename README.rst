@@ -1,4 +1,4 @@
-|CI| |Package| |PyPI| |Coverage| |Depsy|
+|CI| |Package| |PyPI| |Coverage| |Depsy| |Downloads|
 
 Description
 -----------
@@ -36,9 +36,11 @@ or download a `release <https://github.com/mdshw5/pyfaidx/releases>`_ and:
 
 ::
 
-    python setup.py install
+    pip install .
 
 If using ``pip install --user`` make sure to add ``/home/$USER/.local/bin`` to your ``$PATH`` (on linux) or ``/Users/$USER/Library/Python/{python version}/bin`` (on macOS) if you want to run the ``faidx`` script.
+
+Python 2.6 and 2.7 users may choose to use a package version from `v0.7.2 <https://github.com/mdshw5/pyfaidx/releases/tag/v0.7.2.2>`_ or earier.
 
 Usage
 -----
@@ -413,6 +415,9 @@ Examples:
 
 .. code:: bash
 
+    $ faidx -v tests/data/genes.fasta
+    ### Creates an .fai index, but supresses sequence output using --invert-match ###
+
     $ faidx tests/data/genes.fasta NM_001282543.1:201-210 NM_001282543.1:300-320
     >NM_001282543.1:201-210
     CTCGTTCCGC
@@ -643,3 +648,6 @@ Comprehensive Cancer Center in the Department of Oncology.
    
 .. |Package| image:: https://github.com/mdshw5/pyfaidx/actions/workflows/pypi.yml/badge.svg
    :target: https://github.com/mdshw5/pyfaidx/actions/workflows/pypi.yml
+   
+.. |Downloads| image:: https://img.shields.io/pypi/dm/pyfaidx.svg
+   :target: https://pypi.python.org/pypi/pyfaidx/

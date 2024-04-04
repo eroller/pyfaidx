@@ -3,8 +3,6 @@
 Fasta file -> Faidx -> Fasta -> FastaRecord -> Sequence
 """
 
-from __future__ import division
-
 import datetime
 import os
 import re
@@ -13,30 +11,25 @@ import sys
 import shutil
 import warnings
 from collections import namedtuple
-from itertools import islice
+from itertools import islice, zip_longest
 from math import ceil
 from os.path import getmtime
 from tempfile import TemporaryFile
 from threading import Lock
-from pkg_resources import get_distribution
-
-from six import PY2, PY3, integer_types, string_types
-from six.moves import zip_longest
 
 try:
-    from collections import OrderedDict
-except ImportError:  #python 2.6
-    from ordereddict import OrderedDict
+    from importlib.metadata import version
+except ImportError: #python < 3.8
+    from importlib_metadata import version
+
+from collections import OrderedDict
 
 try:
     import fsspec
 except ImportError:
     fsspec = None
 
-__version__ = get_distribution("pyfaidx").version
-
-if sys.version_info > (3, ):
-    buffer = memoryview
+__version__ = version("pyfaidx")
 
 dna_bases = re.compile(r'([ACTGNactgnYRWSKMDVHBXyrwskmdvhbx]+)')
 
@@ -95,8 +88,8 @@ class Sequence(object):
         self.start = start
         self.end = end
         self.comp = comp
-        assert isinstance(name, string_types)
-        assert isinstance(seq, string_types)
+        assert isinstance(name, str)
+        assert isinstance(seq, str)
 
     def __getitem__(self, n):
         """ Returns a sliced version of Sequence
@@ -176,7 +169,7 @@ class Sequence(object):
                 end = self_start + slice_stop + correction_factor
             return self.__class__(self.name, self.seq[n], start, end,
                                   self.comp)
-        elif isinstance(n, integer_types):
+        elif isinstance(n, int):
             if n < 0:
                 n = len(self) + n
             if self.start:
@@ -304,6 +297,34 @@ class Sequence(object):
         c = self.seq.count('C')
         c += self.seq.count('c')
         return (g + c) / len(self.seq)
+    
+    @property
+    def gc_strict(self):
+        """ Return the GC content of seq as a float, ignoring non ACGT characters
+        >>> x = Sequence(name='chr1', seq='NMRATCGTA')
+        >>> y = round(x.gc, 2)
+        >>> y == 0.33
+        True
+        """
+        trimSeq = re.sub(r'[^ACGT]', '', self.seq.upper())
+        gc = sum(trimSeq.count(i) for i in ['G','C'])
+        return gc / len(trimSeq)
+
+    @property
+    def gc_iupac(self):
+        """ Return the GC content of seq as a float, accounting for IUPAC ambiguity 
+        >>> x = Sequence(name='chr1', seq='NMRATCGTA')
+        >>> y = round(x.gc, 2)
+        >>> y == 0.36
+        True
+        """
+        trimSeq = re.sub(r'[^ACGTMRWSYKVHDBN]', '', self.seq.upper())
+        gc =  sum(trimSeq.count(i) for i in ['S','C','G']) 
+        gc += sum(trimSeq.count(i) for i in ['B','V']) * 0.67
+        gc += sum(trimSeq.count(i) for i in ['M','R','Y','K']) * 0.5
+        gc += sum(trimSeq.count(i) for i in ['H','D']) * 0.33
+        gc += trimSeq.count('N') * 0.25
+        return gc / len(trimSeq)
 
 
 class IndexRecord(
@@ -405,12 +426,13 @@ class Faidx(object):
                 self._bgzf = True
                 try:
                     # mutable mode is not supported for bzgf anyways
-                    self.file = bgzf.BgzfReader(fileobj=self.file, mode="b")
+                    self.file = bgzf.BgzfReader(fileobj=self.file, mode="rb")
                 except (ValueError, IOError):
                     raise UnsupportedCompressionFormat(
                         "Compressed FASTA is only supported in BGZF format. Use "
                         "the samtools bgzip utility (instead of gzip) to "
-                        "compress your FASTA."
+                        "compress your FASTA. "
+                        "For example: gunzip file.fa.gz; bgzip file.fa"
                     )
         elif self.filename.lower().endswith(('.bz2', '.zip')):
             raise UnsupportedCompressionFormat(
@@ -423,7 +445,7 @@ class Faidx(object):
         try:
             key_fn_test = self.key_function(
                 "TestingReturnType of_key_function")
-            if not isinstance(key_fn_test, string_types):
+            if not isinstance(key_fn_test, str):
                 raise KeyFunctionError(
                     "key_function argument should return a string, not {0}".
                     format(type(key_fn_test)))
@@ -450,9 +472,9 @@ class Faidx(object):
         self.lock = Lock()
         self.buffer = dict((('seq', None), ('name', None), ('start', None),
                             ('end', None)))
-        if not read_ahead or isinstance(read_ahead, integer_types):
+        if not read_ahead or isinstance(read_ahead, int):
             self.read_ahead = read_ahead
-        elif not isinstance(read_ahead, integer_types):
+        elif not isinstance(read_ahead, int):
             raise ValueError("read_ahead value must be int, not {0}".format(
                 type(read_ahead)))
 
@@ -857,6 +879,9 @@ class Faidx(object):
     def close(self):
         self.__exit__()
 
+    def __del__(self):
+        self.__exit__()
+
     def __enter__(self):
         return self
 
@@ -888,7 +913,7 @@ class FastaRecord(object):
                     start = len(self) + start
                 return self._fa.get_seq(self.name, start + 1, stop)[::step]
 
-            elif isinstance(n, integer_types):
+            elif isinstance(n, int):
                 if n < 0:
                     n = len(self) + n
                 return self._fa.get_seq(self.name, n + 1, n + 1)
@@ -999,7 +1024,7 @@ class FastaRecord(object):
             'shape': (len(self), ),
             'typestr': '|S1',
             'version': 3,
-            'data': buffer(str(self).encode('ascii'))
+            'data': memoryview(str(self).encode('ascii'))
         }
 
 
@@ -1030,7 +1055,7 @@ class MutableFastaRecord(FastaRecord):
                     start = len(self) + start
                 self._fa.faidx.to_file(self.name, start + 1, stop, value)
 
-            elif isinstance(n, integer_types):
+            elif isinstance(n, int):
                 if n < 0:
                     n = len(self) + n
                 return self._fa.faidx.to_file(self.name, n + 1, n + 1, value)
@@ -1091,7 +1116,7 @@ class Fasta(object):
 
     def __getitem__(self, rname):
         """Return a chromosome by its name, or its numerical index."""
-        if isinstance(rname, integer_types):
+        if isinstance(rname, int):
             rname = next(islice(self.records.keys(), rname, None))
         try:
             return self.records[rname]
@@ -1318,13 +1343,9 @@ invalid_characters_set = set(
     chr(x) for x in range(256) if chr(x) not in complement_map[0])
 invalid_characters_string = ''.join(invalid_characters_set)
 
-if PY3:
-    complement_table = str.maketrans(complement_map[0], complement_map[1],
-                                     invalid_characters_string)
-    translate_arguments = (complement_table, )
-elif PY2:
-    complement_table = string.maketrans(complement_map[0], complement_map[1])
-    translate_arguments = (complement_table, invalid_characters_string)
+complement_table = str.maketrans(complement_map[0], complement_map[1],
+                                 invalid_characters_string)
+translate_arguments = (complement_table, )
 
 
 def complement(seq):
